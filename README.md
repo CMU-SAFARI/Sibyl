@@ -7,5 +7,10 @@ Sibyl is the first technique that uses reinforcement learning for data placement
 [**"Sibyl: Adaptive and Extensible Data Placement in Hybrid Storage Systems using Online Reinforcement Learning"**](https://people.inf.ethz.ch/omutlu/pub/Sibyl_RL-based-data-placement-in-hybrid-storage-systems_isca22.pdf)
 In _Proceedings of the 49th International Symposium on Computer Architecture (ISCA),_ New York City, NY, USA, June 2022.
 
+## Prerequisites
+* tf-agents 0.7.1
+## Installation
+
+
 ## Contact
 Gagandeep Singh (gagan dot posted at gmail.com)
