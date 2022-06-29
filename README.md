@@ -32,8 +32,38 @@ $ source venv3/bin/activate
 (venv3) $ pip install -r requirements.txt
 (venv3) $ python setup.py develop
 ```
-## Setup
-We evaluate Sibyl using real systems with various hybrid storage system (HSS) configurations. The HSS devices appear as a single flat block device that exposes one contiguous logical block address space to the OS. We use the [TF-Agents API](https://github.com/tensorflow/agents) to develop Sibyl. We run the Linux Mint 20.1  operating system with the  Ext3 file system.
+## Running
+```
+sibyl execute workload_path driver_path
+```
+
+`workload_path`: Path to a workload's storage trace
+
+`driver_path`: Path to hybrid storage system driver
+
+Additional options: 
+
+`--rl_algo`: Choose different RL algorithms. Current options include C51, DQN, DDQN, REINFORCE, and PPO
+
+`--batch`: The number of
+samples processed in each training iteration
+
+`--lr`:  Determines the rate at
+which neural network weights are updated
+
+`--buf_cap`: Experience buffer size
+
+`--eps`: The exploration rate (𝜖) balances exploration and exploitation rate
+
+`--gam`: The discount factor (𝛾) determines the balance between the immediate and future
+rewards
+
+`--num_itr`: The number of times to run an environment
+
+`--eval_itr`: When to evaluate the learned policy
+
+## Evaluation Setup
+We evaluate Sibyl using real systems with various hybrid storage system (HSS) configurations. The HSS devices appear as a single flat block device that exposes one contiguous logical block address space to the OS. We use the [TF-Agents API](https://github.com/tensorflow/agents) to develop Sibyl. We run the Linux Mint 20.1 operating system with the  Ext3 file system.
 
 ## Contact
 Gagandeep Singh (gagsingh at ethz dot com)
