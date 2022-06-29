@@ -24,6 +24,14 @@ $ source venv3/bin/activate
 ```
 
 ## Preparing HSS Drivers
+The storage management layer in the OS orchestrates host I/O requests across heterogeneous devices, which are connected via an NVM Express (NVMe) or SATA interface. The storage management layer provides the operating system with a unified logical address space (like the multiple device driver (md) kernel module in Linux). The unified logical address space is divided into a number of logical pages (e.g., 4 KiB pages). The pages in the logical address space are assigned to an application. The storage management layer translates a read/write performed on a logical page into a read/write operation on a target storage device based on the data placement policy. In addition, the storage management layer manages data migration between the storage devices in an HSS. When data currently stored in the slow storage device is moved to the fast storage device, it is called promotion. Promotion is usually performed when a page in the slow storage device is accessed frequently. Data is moved from the fast storage device to the slow storage device during an eviction. Eviction typi- cally occurs when the data in the fast storage device is infrequently accessed or when the fast storage device becomes full.
+
+Compiling HSS drivers:
+
+```
+$ cd drivers
+$ gcc -fPIC -shared -o Sibyl_lib.so Sibyl_lib.c
+```
 
 ## Running
 ```
