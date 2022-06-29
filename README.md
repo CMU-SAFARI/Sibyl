@@ -24,13 +24,14 @@ Bibtex entry for citation:
 * pandas 1.1.3
 
 ## Installation
+```
 $ git clone https://github.com/CMU-SAFARI/Sibyl.git # or fork first and clone that
 $ cd Sibyl
 $ python3 -m venv venv3
 $ source venv3/bin/activate
 (venv3) $ pip install -r requirements.txt
 (venv3) $ python setup.py develop
-
+```
 ## Setup
 We evaluate Sibyl using real systems with various hybrid storage system (HSS) configurations. The HSS devices appear as a single flat block device that exposes one contiguous logical block address space to the OS. We use the [TF-Agents API](https://github.com/tensorflow/agents) to develop Sibyl. We run the Linux Mint 20.1  operating system with the  Ext3 file system.
 
