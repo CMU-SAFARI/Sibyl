@@ -2,10 +2,11 @@ import pandas as pd
 import numpy as np
 import time
 import os
+import sys
 from ctypes import *
 device_scenario='H+M'
 so_file = "/home/gagan/Rakesh/read_write_H_M.so"
-SSDFEvictionThreshold = 90
+
 my_functions = CDLL(so_file)
 fastDevice = my_functions.openFastDevice()
 slowDevice = my_functions.openSlowDevice()
@@ -19,14 +20,14 @@ class HybridStorage():
         global fastDevice
         cols=[0,1,2]
         col_name=[ 'col_offset1','col_bytes1','col_type']
-        input_file=self.application+".csv"
-        trace_file=pd.read_csv( input_file,usecols=cols,  names=col_name, header=None                       # ,skiprows=5000\
-#                         ,nrows=100000)
+        input_file=self.application
+        print(input_file)
+        trace_file=pd.read_csv( input_file,usecols=cols,  names=col_name, header=None 
                         ,dtype={'col_offset1':np.float32,'col_bytes1':np.int32}
                         ,nrows=100)
         trace_file = trace_file[['col_offset1','col_bytes1','col_type']]
-        addr_max=trace_file['col_offset1'].max()
-        addr_min=trace_file['col_offset1'].min()
+        # addr_max=trace_file['col_offset1'].max()
+        # addr_min=trace_file['col_offset1'].min()
         trace_file['col_type'][trace_file['col_type'] == 'Write'] = 1 
         trace_file['col_type'][trace_file['col_type'] == 'Read'] = 0
         self._devices = pd.DataFrame(columns=["Device", "Capacity"])
@@ -35,13 +36,14 @@ class HybridStorage():
         self._devices["ReadCount"] = 0
         self._devices.set_index('Device', inplace=True)
         self._devices.at['fastSSD', 'Capacity'] = (2 * 1024 * 1024 * 1024) 
-        self._devices.at["slowSSD", "Capacity"] = (1.76 * 1024 * 1024 * 1024 * 1024) #1.76 TB is the size of the slow SSD
+        self._devices.at["slowSSD", "Capacity"] = (1.76 * 1024 * 1024 * 1024 * 1024) 
         self._devices.at["fastSSD", "Filled"] = 0
         self._devices.at["slowSSD", "Filled"] = 0
         self._devices.at["fastSSD", "WriteCount"] = 0
         self._devices.at["slowSSD", "WriteCount"] = 0
         self._devices.at["fastSSD", "ReadCount"] = 0
         self._devices.at["slowSSD", "ReadCount"] = 0
+        self.SSDFEvictionThreshold = 90
         self._trace_index = 0
         self.metadata_time=0
         self.qrator_proc_time=0
@@ -82,8 +84,6 @@ class HybridStorage():
         self._evictLatency=0
         self._invalid_page_fast=0
         self._invalid_page_slow=0
-        self._migrateLatency=0
-        #print( self._mapping_table)
         self._mapping_table.iloc[0:0]
         self._metadata_table.iloc[0:0]
         self._invalid_fast=0
@@ -102,8 +102,134 @@ class HybridStorage():
         self._devices.at["slowSSD", "WriteCount"] = 0
         self._devices.at["fastSSD", "ReadCount"] = 0
         self._devices.at["slowSSD", "ReadCount"] = 0
+    
+    
+    
+    def promote(self,request, readFlag): # To promote a request from slow SSD to fast SSD
+        global gLBAFast  
+        latency = 0
+        start = 0
+        end = 0
+        VBA = str(request[0])
+        oldLBA = self._mapping_table.at[VBA, "LBA"]
+        newSize = request[1]
+        finalSize = 0
+        totalSize = self._mapping_table.at[VBA, "Size"]
+        
+        if newSize > totalSize :
+            finalSize = newSize
+        else:
+            finalSize = totalSize
+            
+        newLBA = int(gLBAFast)
+        gLBAFast += finalSize
+    
+        #if VBA in self._mapping_table.index:
+        self._mapping_table.at[VBA, "Device"] = "fastSSD" # Promote the page from slow SSD to fast SSD
+        self._mapping_table.at[VBA, "LBA"] = newLBA
+        self._mapping_table.at[VBA, "NumMigrationsSSD1"] += 1
+        totalSize = self._mapping_table.at[VBA, "Size"]
+        self._devices.at["slowSSD", "Filled"] -= totalSize
+        self._devices.at["slowSSD", "ReadCount"] += 1
+        
+        if readFlag == False:
+            currSize = int(request[1])
+            
+            if currSize < totalSize:
+            
+                self._devices.at["fastSSD", "Filled"] += totalSize
+                
+                start = time.perf_counter()
+                my_functions.qrator_read(slowDevice, oldLBA+currSize, totalSize-currSize)
+                end = time.perf_counter()           
+                latency += (end - start)
+                
+                start = time.perf_counter()
+                my_functions.qrator_write(fastDevice, newLBA, totalSize)
+                end = time.perf_counter()                    
+                latency += (end - start)
+                
+            else:
+                self._mapping_table.at[VBA, "Size"] = currSize
+                self._devices.at["fastSSD", "Filled"] += currSize
+                start = time.perf_counter()
+                my_functions.qrator_write(fastDevice, newLBA, currSize)
+                end = time.perf_counter()            
+                latency += (end - start)
+                
+        else: # ReadFlag is True
+            self._devices.at["fastSSD", "Filled"] += totalSize
+        
+            start = time.perf_counter()
+            my_functions.qrator_read(slowDevice, oldLBA, totalSize)
+            end = time.perf_counter()        
+            latency += (end - start)
+            
+            start = time.perf_counter()
+            my_functions.qrator_write(fastDevice, newLBA, totalSize)
+            end = time.perf_counter()                
+            latency += (end - start)
+        
+        #print("Promote Latency ", latency)
+    
+        return latency
+    def evict(self,request, readFlag): # To evict a request from fast SSD to slow SSD
+        global gLBASlow  
+        latency = 0
+        start = 0
+        end = 0
+        VBA = str(request[0])
+        oldLBA = self._mapping_table.at[VBA, "LBA"]
+        newSize = request[1]
+        finalSize = 0
+        totalSize = self._mapping_table.at[VBA, "Size"]
+        
+        if newSize > totalSize :
+            finalSize = newSize
+        else:
+            finalSize = totalSize
+            
+        newLBA = int(gLBASlow)
+        gLBASlow += finalSize
+    
+        #if VBA in self._mapping_table.index:
+        self._mapping_table.at[VBA, "Device"] = "fastSSD" # Promote the page from slow SSD to fast SSD
+        self._mapping_table.at[VBA, "LBA"] = newLBA
+        self._mapping_table.at[VBA, "NumMigrationsSSD1"] += 1
+        totalSize = self._mapping_table.at[VBA, "Size"]
+        self._devices.at["fastSSD", "Filled"] -= totalSize
+        self._devices.at["fastSSD", "ReadCount"] += 1
+        
+        if readFlag == False:
+            currSize = int(request[1])
+            
+            if currSize < totalSize:
+            
+                self._devices.at["slowSSD", "Filled"] += totalSize
+                
+                start = time.perf_counter()
+                my_functions.qrator_read(fastDevice, oldLBA+currSize, totalSize-currSize)
+                end = time.perf_counter()           
+                latency += (end - start)
+                
+                start = time.perf_counter()
+                my_functions.qrator_write(slowDevice, newLBA, totalSize)
+                end = time.perf_counter()                    
+                latency += (end - start)
+                
+            else:
+                self._mapping_table.at[VBA, "Size"] = currSize
+                self._devices.at["slowSSD", "Filled"] += currSize
+                start = time.perf_counter()
+                my_functions.qrator_write(slowDevice, newLBA, currSize)
+                end = time.perf_counter()            
+                latency += (end - start)
+                
+      
+    
+        return latency
 
-    def urgentEviction_rk(self,curReqSize):
+    def urgentEviction(self,curReqSize):
         start_time = time.perf_counter()
         global gLBASlow
         global slowDevice
@@ -146,8 +272,8 @@ class HybridStorage():
         return latency
 
 
-    def read(self,obs):
-        start_time = time.perf_counter()
+    def read(self,obs,memory_type):
+        
         global slowDevice
         global fastDevice
         latency = 0
@@ -158,7 +284,11 @@ class HybridStorage():
         request.append(int(obs[0][2]))
         VBA = str(request[0])
         if VBA in self._mapping_table.index:
-            deviceName = self._mapping_table.at[request[0],"Device"]
+            
+            if(memory_type==1):
+                    deviceName = "fastSSD"
+            else:
+                    deviceName = "slowSSD"
             self._mapping_table.at[VBA,"TotalReads"] += 1
             self._mapping_table.at[VBA,"ReadWrite"] = 'Read'
             self._mapping_table.at[VBA,"ReuseDist"] = 0
@@ -167,6 +297,20 @@ class HybridStorage():
             LBA = self._mapping_table.at[VBA,"LBA"] 
             #Calculate latency
             #It is a sequential read, multiply sequential read latency by the number of chunks read
+            
+            #####################GAGAN
+            dname = self._mapping_table.at[request[0],"Device"] #current device
+
+            sys.stdout.write("> dname={} while RL device={}\n".format(dname,deviceName))
+            if (dname == "fastSSD") and (deviceName == "slowSSD"):
+                print("[READ]****PROMOTE***")
+                latency += self.promote(request, False)
+            elif (dname == "slowSSD") and (deviceName == "fastSSD"):
+                print("[READ] ****EVICT***")
+                latency += self.evict(request, False)
+            else:
+                print("[READ] ****NO MOVE***")
+            #####################END
             readSize = int(request[1])
             if deviceName == "slowSSD":
                 start = time.perf_counter()
@@ -177,9 +321,8 @@ class HybridStorage():
                 start = time.perf_counter()
                 my_functions.qrator_read(fastDevice, LBA, readSize)
                 end = time.perf_counter()
-            latency = (end - start) 
-        else:
-            print("\t\t READ BEFORE A WRITE")
+            latency += (end - start) 
+     
         return latency
 
     def write(self,obs,memory_type):
@@ -235,15 +378,14 @@ class HybridStorage():
                     if newSize > currSize:
                         extraSize = newSize-currSize
                         filledPercent = 100*(self._devices.at["fastSSD","Filled"] + extraSize)/self._devices.at["fastSSD","Capacity"]
-                        if filledPercent > SSDFEvictionThreshold:
-                            self._evictLatency = self.urgentEviction_rk(extraSize)
+                        if filledPercent > self.SSDFEvictionThreshold:
+                            self._evictLatency = self.urgentEviction(extraSize)
                     
                 if dname!=deviceName and dname!='':
                         if(dname=='fastSSD'):
                             self._invalid_page_fast=1
                         if(dname=="slowSSD"):
                             self._invalid_page_slow=1  
-        
                 #Check if the new size is greater than currSize then creat a new mapping
                 if newSize > currSize:
                     self._devices.at[dname, "Filled"] -= currSize
@@ -266,8 +408,8 @@ class HybridStorage():
                     deviceName = "slowSSD"
             if(deviceName=="fastSSD"):
                 filledPercent = 100*(self._devices.at["fastSSD","Filled"]+newSize)/self._devices.at["fastSSD","Capacity"]
-                if filledPercent > SSDFEvictionThreshold:
-                    self._evictLatency = self.urgentEviction_rk(newSize)
+                if filledPercent > self.SSDFEvictionThreshold:
+                    self._evictLatency = self.urgentEviction(newSize)
             writeCounter = 1
             readCounter = 0
             totalWriteCounter = 1
@@ -327,10 +469,11 @@ class HybridStorage():
     
     def placement(self, obs, action):
         self._mapping_table.ReuseDist += 1
+        print("[PLACEMENT FOR REQUEST TYPE]:{} (1: WRITE, 0: READ)".format(int(obs[0][2])))
         if(int(obs[0][2])==1):
             self._reqLatency= self.write(obs, action)
         else:
-            self._reqLatency= self.read(obs)
-        self._final_latency=self._migrateLatency+self._reqLatency+self._evictLatency    
+            self._reqLatency= self.read(obs, action)
+        self._final_latency=self._reqLatency    
         return self._final_latency
 

@@ -3,9 +3,8 @@ from tf_agents.specs import array_spec
 import numpy as np
 from tf_agents.trajectories import time_step as timeStep
 import time
-OPTIMIZE_DEBUG=True
-NEW_DEBUG=False
-NORMAL=False
+import sys
+NEW_DEBUG=True
 N_spatial=5
 class HybridStorageEnvironment(py_environment.PyEnvironment):
     def __init__(self, hybrid):
@@ -13,7 +12,7 @@ class HybridStorageEnvironment(py_environment.PyEnvironment):
         self._action_spec = array_spec.BoundedArraySpec(
             shape=(), dtype=np.int32, minimum=0, maximum=1, name='action')  
         self._observation_spec = array_spec.BoundedArraySpec(
-            shape=(1,8), dtype=np.float64, minimum=None, maximum=None, name='observation') # 1,9 means single 9 element array
+            shape=(1,8), dtype=np.float64, minimum=None, maximum=None, name='observation') 
         self._action_values = {0:'slow',1:'fast'}
         self._hybrid = hybrid
         self._current_perf=0
@@ -58,29 +57,26 @@ class HybridStorageEnvironment(py_environment.PyEnvironment):
 
     def enter_env (self,action):
         current_state = np.zeros((1,3),dtype=np.float64)        
-        #obs=np.append([self._hybrid._state[self._hybrid._trace_index,:]],[self._hybrid._current_fast_capacity])
         current_state=np.array([self._hybrid._state[self._hybrid._trace_index,:]], dtype=np.float64)
         if str(float(self._hybrid._state[self._hybrid._trace_index,0])) in self._hybrid._mapping_table.index:
                 self._prev_action=self._hybrid._mapping_table.at[str(self._hybrid._state[self._hybrid._trace_index,0]),'PrevAction']      
         else:
             self._prev_action=1
-
-        if(NEW_DEBUG==True):
-            print("\t\tprevious placement was::::",self._prev_action)
         #Perform placement
         self._current_perf=self._hybrid.placement(current_state,action)*1e3
         
     def _step(self, action): 
         if self._episode_ended:
-            print("EPISODE ENDED")
-      # The last action ended the episode. Ignore the current action and start
-      # a new episode.
             return self.reset()
         global VBA_prev
         self._obs = np.zeros((1,3),dtype=np.float64)    
         self._obs=np.array([self._hybrid._state[self._hybrid._trace_index,:]], dtype=np.float64)
+        
+        if(NEW_DEBUG==True):
+            sys.stdout.write("> Observation vector: %s\n" % self._obs)
+            sys.stdout.write("> Action: %d\n" % action)
         VBA_check=str(self._hybrid._state[self._hybrid._trace_index,0])
-###################################################accessCount1###############################################################################
+
         if VBA_check in self._hybrid._metadata_table.index:
             self._hybrid._metadata_table.at[VBA_check,"accessCount1"] += 1
             curr_place=self._hybrid._metadata_table.at[VBA_check,"Device1"]     
@@ -88,7 +84,6 @@ class HybridStorageEnvironment(py_environment.PyEnvironment):
         else:
             access_count=0
             curr_place=1
-####################################################spatialCount1##############################################################################
         if VBA_check in self._hybrid._metadata_table.index:
             if(abs(self._hybrid._state[self._hybrid._trace_index,0]-VBA_prev)<=N_spatial):
                         self._hybrid._metadata_table.at[VBA_check,"spatialCount1"]+=1
@@ -103,7 +98,8 @@ class HybridStorageEnvironment(py_environment.PyEnvironment):
         else:
             burst_count=0
 
-        self.enter_env (action)  
+        self.enter_env(action)  
+
         prevReuse=self._hybrid._mapping_table.at[str(self._hybrid._state[self._hybrid._trace_index,0]),'ReuseDist']   
         self._hybrid._trace_index += 1       
         VBA_prev=self._hybrid._state[self._hybrid._trace_index-1,0]
@@ -115,33 +111,27 @@ class HybridStorageEnvironment(py_environment.PyEnvironment):
             self._fast_action+=1
         else:
             self._slow_action+=1
-
-        if not (self._hybrid._trace_index==self._hybrid._trace_length):
-            while(self._hybrid._state[self._hybrid._trace_index,2]==0):
-                self.enter_env (action)
-                if(NEW_DEBUG==True):
-                    print("\t\ttotal time:::",self._total_perf/1e3)
+        if (self._hybrid._trace_index==self._hybrid._trace_length):
+            self._episode_ended = True
+        # if not (self._hybrid._trace_index==self._hybrid._trace_length):
+        #     while(self._hybrid._state[self._hybrid._trace_index,2]==0):
+        #         self.enter_env (action)
+        #         if(NEW_DEBUG==True):
+        #             sys.stdout.write("> Total time: {}\n" .format(self._total_perf/1e3))
               
-                self._hybrid._trace_index += 1
-                self._total_access+=1
+        #         self._hybrid._trace_index += 1
+        #         self._total_access+=1
 
-                if(self._hybrid._trace_index==self._hybrid._trace_length):
-                    self._episode_ended = True
-                    break
+        #         if(self._hybrid._trace_index==self._hybrid._trace_length):
+        #             self._episode_ended = True
+        #             break
 
-        else:
-                self._episode_ended = True
-        min_reuse=1
+        # else:
+        #         self._episode_ended = True
+        min_reuse=0
         max_reuse=self._hybrid._trace_length/2
         
-        if(OPTIMIZE_DEBUG==True):
-            print("Setting access_count:::::",access_count)
-            print("Setting spatial_count :::::",spatial_count)
-            print("Setting burst_count :::::",burst_count)
-            print("Setting Device1 placement:::::",curr_place)
-        if (NORMAL):
-            prevReuse = (prevReuse - min_reuse) / (max_reuse - min_reuse)
-        # self._obs = np.append(self._obs, [[prevReuse]])
+     
         access_count = (access_count - min_reuse) / (max_reuse - min_reuse)
         self._obs=np.append([self._obs],[access_count])
         self._obs=np.append([self._obs],[spatial_count])
@@ -154,7 +144,7 @@ class HybridStorageEnvironment(py_environment.PyEnvironment):
 
         self._total_evicts+=self._hybrid.numEvicts
         self._obs=self._obs[1:10]
-        # print(self._obs)
+       
        
         self._obs[0]=(self._obs[0]-self._hybrid.size_min)/(self._hybrid.size_max-self._hybrid.size_min) ## NORMALIZING PAGE SIZE
        
@@ -165,15 +155,16 @@ class HybridStorageEnvironment(py_environment.PyEnvironment):
             array_sum = np.sum(self._obs)
             array_has_nan = np.isnan(array_sum)
             if(array_has_nan):
-                print("ERROR WARNING FALSE")
+                sys.stderr.write("> Invalid observation vector\n")
            
             print("\t\t***************************************************************************************************")
-        if(OPTIMIZE_DEBUG==True or NEW_DEBUG==True):
-             print("\t\tObservation (size={}, r/w={},\
-                    \n\t\taccess={},spatial={},burst={},placement={},\
-                    \n\t\tfilled_fast={},filled_slow={}".format(self._obs[0],self._obs[1],self._obs[2],self._obs[3],\
+        if(NEW_DEBUG==True):
+
+            sys.stdout.write("> Size:{}, R/W:{}, Access count:{},\
+                 Spatial count:{}, #pages:{}, #previous:{}, Filled_Fast:{},\
+                  Filled_slow:{}\n".format(self._obs[0],self._obs[1],self._obs[2],self._obs[3],\
                         self._obs[4],self._obs[5],self._obs[6],self._obs[7]))
-    
+     
 
         self._obs=np.array([self._obs], dtype=np.float64)  
  
@@ -190,14 +181,14 @@ class HybridStorageEnvironment(py_environment.PyEnvironment):
         FastSSDTotalWrites = (numMigrationsForFasterSSD + self._hybrid._devices.at['fastSSD','WriteCount'])
    
         if(NEW_DEBUG==True):
-            print("\t\tTrace:::",self._hybrid.trace)
+            
             print("\t\tMigrations",migrations)
             print("\t\tInvalid pages",self._hybrid._invalid_page_fast+self._hybrid._invalid_page_slow)
             print("\t\ttotal time:::",self._total_perf/1e3)
             print("\t\ttOtoal _current_perf:::",self._current_perf/1e3 )
             print("\t\tOnly write request:::", self._hybrid._reqLatency )
             print("\t\tOnly eviction request:::", self._hybrid._evictLatency)
-            print("\t\tMigration for the request:::",self._hybrid._migrateLatency )
+
             print("\t\tfilled fast={}, filled slow={}".format(filledPercent_fast,filledPercent_slow))
 
         reward_perf=(0.1/self._current_perf)-self._hybrid.numEvicts**0.09
