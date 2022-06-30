@@ -1,6 +1,6 @@
-#sudo python3 __init__.py execute /home/gagan/sibyl_git/sibyl/hm_1.csv
+#sudo sibyl execute /home/gagan/sibyl_git/sibyl/hm_1.csv /home/gagan/Rakesh/read_write_H_M.so
 from argparse import ArgumentDefaultsHelpFormatter, ArgumentParser
-from sibyl import execute
+from sibyl.src import execute
 modules = [
     'execute'
     ]

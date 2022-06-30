@@ -1,7 +1,5 @@
 #!/usr/bin/env python
 import tensorflow as tf
-from tf_agents.drivers import dynamic_episode_driver
-from tf_agents.drivers import dynamic_step_driver
 
 def compute_avg_return(environment, policy, num_episodes):
     total_return = 0.0
@@ -48,16 +46,3 @@ def create_recurrent_network(
           + [dense(num_units) for num_units in output_fc_layer_units]
           + [logits(num_actions)])
 
-def collect_data(environment, policy, buffer,steps,metrics=None):
-    if(metrics!=None):
-            observe=[buffer.add_batch]+metrics
-    else:
-        observe=[buffer.add_batch]
-    dynamic_step_driver.DynamicStepDriver(environment,policy, observers=observe, num_steps=steps).run()
-
-def collect_episode(environment, policy, buffer,episodes,metrics=None):
-    if(metrics!=None):
-            observe=[buffer.add_batch]+metrics
-    else:
-        observe=[buffer.add_batch]
-    dynamic_episode_driver.DynamicEpisodeDriver(environment,policy, observers=observe, num_episodes=episodes).run()

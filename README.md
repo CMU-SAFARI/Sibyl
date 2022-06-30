@@ -44,7 +44,7 @@ sibyl execute workload_path driver_path
 
 Additional options: 
 
-`--rl_algo`: Choose different RL algorithms. Current options include C51, DQN, DDQN, REINFORCE, and PPO
+`--rl_algo`: Depending upon your environment choose a suitable RL algorithms. Current options include C51, DQN, DDQN, REINFORCE, and PPO
 
 `--batch`: The number of
 samples processed in each training iteration
@@ -112,6 +112,7 @@ Please also cite [TFAgents](https://github.com/tensorflow/agents):
 ```
 ## Contact
 Gagandeep Singh (gagsingh at ethz dot com)
+Rakesh Nadig (nadigr at ethz dot com)
 
 ## Acknowledgements
 We thank the SAFARI Research Group members for valuable feedback and the stimulating intellectual environment they provide. We acknowledge the generous gifts of our industrial partners.

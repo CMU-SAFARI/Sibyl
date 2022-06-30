@@ -27,24 +27,38 @@ from enum import Enum
 import os
 from ctypes import *
 import sys
-#Environment
-from sibyl.hybridstorage import HybridStorage
-from sibyl.hybridstorageenvironment import HybridStorageEnvironment
-from sibyl.utils import collect_data, collect_episode, compute_avg_return, create_recurrent_network, create_feedforward_network
+from sibyl.src.hybridstorage import HybridStorage
+from sibyl.src.hybridstorageenvironment import HybridStorageEnvironment
+from sibyl.src.utils import compute_avg_return, create_recurrent_network, create_feedforward_network
 import functools
 from tensorflow.keras import datasets, layers, models
 from tf_agents.networks import sequential
+from tf_agents.drivers import dynamic_episode_driver
+from tf_agents.drivers import dynamic_step_driver
 import time, array, random, copy, math
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
-train_metrics = [tf_metrics.MaxReturnMetric(),tf_metrics.ChosenActionHistogram(),tf_metrics.AverageReturnMetric(), tf_metrics.AverageEpisodeLengthMetric()]
+from tqdm import trange
+import logging
+logging.basicConfig(filename='rl_debug.log', filemode='w', format='%(asctime)s %(name)s - %(levelname)s - %(message)s',level=logging.INFO, datefmt='%m/%d/%Y %I:%M:%S %p')
 
+def collect_data(environment, policy, buffer,steps,metrics=None):
+    if(metrics!=None):
+            observe=[buffer.add_batch]+metrics
+    else:
+        observe=[buffer.add_batch]
+    dynamic_step_driver.DynamicStepDriver(environment,policy, observers=observe, num_steps=steps).run()
 
+def collect_episode(environment, policy, buffer,episodes,metrics=None):
+    if(metrics!=None):
+            observe=[buffer.add_batch]+metrics
+    else:
+        observe=[buffer.add_batch]
+    dynamic_episode_driver.DynamicEpisodeDriver(environment,policy, observers=observe, num_episodes=episodes).run()
 
 def main(args):
-    print("inside main")
     trace=args.workload_path
     # trace = os.path.expanduser(args.workload_path)
-    print("[trace= %s]" %trace)
+    logging.info("Trace=%s" %trace)
     if not os.path.isfile(trace):
         print("[error] %s cannot read" % trace)
         exit(1)
@@ -61,29 +75,25 @@ def main(args):
     collect_episodes = 2
     eps = args.eps
     gam = args.gam
-    KERAS_LSTM_FUSED = 2
     num_iterations = args.num_itr
     eval_interval = args.eval_itr  # @param {type:"integer"}
     fc_layer_params = (20,30) 
     log_interval = 1 # @param {type:"integer"}
     num_eval_episodes = 1 # @param {type:"integer"}
-    lstm_size = (20,)
     num_atoms = 51  # @param {type:"integer"}
     min_q_value = -20  # @param {type:"integer"}
     max_q_value = 20  # @param {type:"integer"}
     n_step_update = 2  # @param {type:"integer"}
 
     orig_stdout = sys.stdout
-    sys.stdout = open("rl_log.txt",'wt')
-    memEnvironemt = HybridStorageEnvironment(HybridStorage(trace))
-    print('Observation Spec:')
-    print(memEnvironemt.time_step_spec().observation)
-    print('Action Spec:')
-    print(memEnvironemt.action_spec())
-    print('Reward Spec:')
-    print(memEnvironemt.time_step_spec().reward)
+    so_path=args.so_path
 
-    testEnvironemt = HybridStorageEnvironment(HybridStorage(trace))
+    memEnvironemt = HybridStorageEnvironment(HybridStorage(trace,so_path))
+    logging.info("Observation Spec={}".format(memEnvironemt.time_step_spec().observation))
+    logging.info("Action Spec={}".format(memEnvironemt.action_spec()))
+    logging.info("Reward Spec={}".format(memEnvironemt.time_step_spec().reward))
+
+    testEnvironemt = HybridStorageEnvironment(HybridStorage(trace,so_path))
 
     num_parallel_environments=6
 
@@ -93,9 +103,6 @@ def main(args):
     all_train_loss = []
     all_metrics = []
     returns=[]
-
-
-
 
     random_policy = random_tf_policy.RandomTFPolicy(train_env.time_step_spec(),
                                                   train_env.action_spec())
@@ -107,13 +114,6 @@ def main(args):
             minval=-0.03, maxval=0.03),
         bias_initializer=tf.compat.v1.initializers.constant(-0.2))
 
-    fused_lstm_cell = functools.partial(
-        tf.keras.layers.LSTMCell, implementation=KERAS_LSTM_FUSED)
-    dense = functools.partial(
-        tf.keras.layers.Dense,
-        activation=tf.keras.activations.relu,
-        kernel_initializer=tf.compat.v1.variance_scaling_initializer(
-            scale=2.0, mode='fan_in', distribution='truncated_normal'))
 
     num_actions = train_env.action_spec().maximum - train_env.action_spec().minimum + 1
     action_spec = train_env.action_spec()
@@ -122,7 +122,7 @@ def main(args):
     update_period = 4
 
     optimizer = tf.keras.optimizers.RMSprop ( lr = 2.5e-4 , rho = 0.95 , momentum = 0.0,
-                                    epsilon = 0.00001 , centered = True )
+                                    epsilon = eps , centered = True )
 
     epsilon_fn = tf.keras.optimizers.schedules.PolynomialDecay(
                     initial_learning_rate=1.0,  # initial ε
@@ -136,10 +136,6 @@ def main(args):
         #with strategy.scope():
        
         from tf_agents.networks import sequential
-        q_net = q_network.QNetwork(
-            train_env.observation_spec(),
-            train_env.action_spec(),
-            fc_layer_params=fc_layer_params)
 
         q_net = q_network.QNetwork(
                 train_env.observation_spec(),
@@ -160,10 +156,6 @@ def main(args):
                 epsilon_greedy=lambda: epsilon_fn(train_step_counter))
     if(algo=='DDQN'):
         #with strategy.scope():
-        q_net = q_network.QNetwork(
-            train_env.observation_spec(),
-            train_env.action_spec(),
-            fc_layer_params=fc_layer_params)
 
         q_net = q_network.QNetwork(
                 train_env.observation_spec(),
@@ -188,35 +180,40 @@ def main(args):
             from tf_agents.networks import categorical_q_network
             from tf_agents.agents.categorical_dqn import categorical_dqn_agent
             train_step_counter = tf.Variable(0)
-            optimizer = tf.keras.optimizers.RMSprop(lr=learning_rate, rho=0.95, momentum=0.0, epsilon=0.00001, centered=True)
+            optimizer = tf.keras.optimizers.RMSprop(lr=learning_rate, rho=0.95, momentum=0.0, epsilon=eps, centered=True)
             epsilon_fn = tf.keras.optimizers.schedules.PolynomialDecay(
-                            initial_learning_rate=1.0, 
+                            initial_learning_rate=1, 
                             decay_steps=traceLength // update_period,
                             end_learning_rate=0.0001,
                             power=0.6)
             categorical_q_net = categorical_q_network.CategoricalQNetwork(
-            train_env.observation_spec(),
-            train_env.action_spec(),
-            activation_fn=tf.nn.swish,
-            num_atoms=num_atoms,
-            fc_layer_params=fc_layer_params)
+                train_env.observation_spec(),
+                train_env.action_spec(),
+                activation_fn=tf.nn.swish,
+                num_atoms=num_atoms,
+                fc_layer_params=fc_layer_params)
+            target_categorical_q_net = categorical_q_network.CategoricalQNetwork(
+                train_env.observation_spec(),
+                train_env.action_spec(),
+                activation_fn=tf.nn.swish,
+                num_atoms=num_atoms,
+                fc_layer_params=fc_layer_params)
             tf_agent = categorical_dqn_agent.CategoricalDqnAgent(
-            train_env.time_step_spec(),
-            train_env.action_spec(),
-            categorical_q_network=categorical_q_net,
-            epsilon_greedy=lambda: epsilon_fn(train_step_counter),
-            #epsilon_greedy=<epsilon_val>,
-            optimizer=optimizer,
-            min_q_value=min_q_value,
-            max_q_value=max_q_value,
-            n_step_update=n_step_update,
-            # td_errors_loss_fn=tf.keras.losses.Huber(reduction="none"),
-            td_errors_loss_fn=common.element_wise_squared_loss,
-            gamma=gam,
-              debug_summaries=True,
-              summarize_grads_and_vars=True,
-            train_step_counter=train_step_counter)
-
+                train_env.time_step_spec(),
+                train_env.action_spec(),
+                categorical_q_network=categorical_q_net,
+                target_categorical_q_network=target_categorical_q_net,
+                epsilon_greedy=lambda: epsilon_fn(train_step_counter),
+                optimizer=optimizer,
+                min_q_value=min_q_value,
+                max_q_value=max_q_value,
+                n_step_update=n_step_update,
+                td_errors_loss_fn=common.element_wise_squared_loss,
+                gamma=gam,
+                debug_summaries=True,
+                summarize_grads_and_vars=True,
+                train_step_counter=train_step_counter)
+    
     if (algo=='REINFORCE'):
         from tf_agents.networks import value_network
         use_value_network=True
@@ -316,7 +313,6 @@ def main(args):
 
 
     if(algo in[ 'DDQN','TD3','DQN']):
-
         common.function(collect_data(train_env, random_policy, replay_buffer,initial_collect_steps))
         # Dataset generates trajectories with shape [Bx2x...]
         dataset = replay_buffer.as_dataset(
@@ -327,7 +323,6 @@ def main(args):
 
 
     if algo in ['C51']:
-      
         common.function(collect_data(train_env, random_policy, replay_buffer,initial_collect_steps))
         dataset = replay_buffer.as_dataset(
             num_parallel_calls=3, 
@@ -340,7 +335,9 @@ def main(args):
 
     # Reset the train step
     tf_agent.train_step_counter.assign(0)
-    train_metrics = [tf_metrics.MaxReturnMetric(),tf_metrics.ChosenActionHistogram(),tf_metrics.AverageReturnMetric(), tf_metrics.AverageEpisodeLengthMetric()]
+    num_episodes = tf_metrics.NumberOfEpisodes()
+    env_steps = tf_metrics.EnvironmentSteps()   
+    train_metrics = [num_episodes,env_steps,tf_metrics.MaxReturnMetric(),tf_metrics.ChosenActionHistogram(dtype=tf.int32),tf_metrics.AverageReturnMetric(), tf_metrics.AverageEpisodeLengthMetric()]
 
     # Evaluate the agent's policy once before training.
     avg_return = compute_avg_return(eval_env, tf_agent.policy, num_eval_episodes)
@@ -348,7 +345,11 @@ def main(args):
     total_loss=[]
     all_train_loss = []
     all_metrics = []
-    for it in range(num_iterations):
+
+
+    current_metrics = []
+    
+    for _ in trange(num_iterations, desc="Episode", unit="episodes"):
      
         current_metrics = []
         # Collect a few episodes using collect_policy and save to the replay buffer.
@@ -367,13 +368,13 @@ def main(args):
         for i in range(len(train_metrics)):
                 current_metrics.append(train_metrics[i].result().numpy())
         all_metrics.append(current_metrics)
-        # print(all_metrics)
         if step % log_interval == 0:
             total_loss.append(train_loss_in.loss)
-            print('step = {0}: loss = {1}'.format(step, train_loss_in.loss))
+            logging.info('step = {}: loss = {}'.format(step, train_loss_in.loss))
 
         if step % eval_interval == 0:
             avg_return = compute_avg_return(eval_env, tf_agent.policy, num_eval_episodes)
+            logging.info('avg_return = {}'.format(avg_return))
             returns.append(avg_return)
 
     #Saving the agent
@@ -381,21 +382,20 @@ def main(args):
     #Saving the policy
     agent_policy = tf_agent.policy
     policy_saver.PolicySaver(agent_policy).save("sibyl_policy")
-
+    print('Number of Steps: ', env_steps.result().numpy())
+    print('Number of Episodes: ', num_episodes.result().numpy())
     for i in range(len(train_metrics)):
                     print('{}: {}'.format(train_metrics[i].name, train_metrics[i].result().numpy()))
-
+    print("Returns for evaluated episodes:",returns)
+    print("Training loss:",total_loss)
     # Reset the train step
     tf_agent.train_step_counter.assign(0)
 
     #reset eval environment
     eval_env.reset()
-    sys.stdout.write("> Ending RL Run\n")
+    logging.info("> Ending RL Run\n")
     ###########ends###############
-    sys.stdout.close()
-    sys.stdout=orig_stdout 
-
-
+    
 
 def argparser():
     parser = ArgumentParser(
@@ -403,16 +403,17 @@ def argparser():
         add_help=False
     )
     parser.add_argument("workload_path")
+    parser.add_argument("so_path")
     group = parser.add_mutually_exclusive_group()
-    group.add_argument('--rl_algo', default="C51")
+    group.add_argument('--rl_algo', default="DQN")
     parser.add_argument("--batch", default=128, type=int)
     parser.add_argument("--lr", default=2e-4, type=float)
     parser.add_argument("--buf_cap", default=1000, type=int)
     parser.add_argument("--init_collect", default=1000, type=int)
     parser.add_argument("--eps", default=1, type=float)
-    parser.add_argument("--gam", default=0.9, type=float)
-    parser.add_argument("--num_itr", default=1000, type=int)
-    parser.add_argument("--eval_itr", default=1000, type=int)
+    parser.add_argument("--gam", default=0.99, type=float)
+    parser.add_argument("--num_itr", default=100, type=int)
+    parser.add_argument("--eval_itr", default=1, type=int)
     return parser
 if __name__ == "__main__":
     main()
