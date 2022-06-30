@@ -1,4 +1,3 @@
-#sudo sibyl execute /home/gagan/sibyl_git/sibyl/hm_1.csv /home/gagan/Rakesh/read_write_H_M.so
 from argparse import ArgumentDefaultsHelpFormatter, ArgumentParser
 from sibyl.src import execute
 modules = [
