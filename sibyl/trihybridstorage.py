@@ -22,7 +22,7 @@ class TriHybridStorage():
         input_file=self.application
         trace_file=pd.read_csv( input_file,usecols=cols,  names=col_name, header=None 
                         ,dtype={'col_offset1':np.float32,'col_bytes1':np.float32}
-                        ,nrows=100000)
+                        )
         trace_file = trace_file[['col_offset1','col_bytes1','col_type']]
         trace_file['col_type'][trace_file['col_type'] == 'Write'] = 1 
         trace_file['col_type'][trace_file['col_type'] == 'Read'] = 0
