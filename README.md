@@ -12,6 +12,7 @@ We evaluate Sibyl using real systems with various HSS configurations. The HSS de
 * tensorflow 2.4.1
 * tf-agents 0.7.1
 * pandas 1.1.3
+* tqdm
 
 ## Installation
 ```
@@ -35,8 +36,8 @@ $ gcc -fPIC -shared -o Sibyl_lib.so Sibyl_lib.c
 ## Workloads
 We have tested our environment on block I/O traces from:
 
-*[MSR Cambridge](http://iotta.snia.org/traces/block-io/388) 
-*[FileBench](https://github.com/filebench/filebench)
+* [MSR Cambridge](http://iotta.snia.org/traces/block-io/388) 
+* [FileBench](https://github.com/filebench/filebench)
 
 
 ## Running
