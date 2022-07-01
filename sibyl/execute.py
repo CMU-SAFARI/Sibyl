@@ -29,6 +29,9 @@ from ctypes import *
 import sys
 from sibyl.src.hybridstorage import HybridStorage
 from sibyl.src.hybridstorageenvironment import HybridStorageEnvironment
+from sibyl.src.trihybridstorage import TriHybridStorage
+from sibyl.src.trihybridstorageenvironment import TriHybridStorageEnvironment
+
 from sibyl.src.utils import compute_avg_return, create_recurrent_network, create_feedforward_network
 import functools
 from tensorflow.keras import datasets, layers, models
@@ -66,7 +69,7 @@ def main(args):
 
     #Setting hyperparameters
     algo =args.rl_algo # DQN, DDQN, PPO, REINFORCE
-    print("[algo= %s]" %algo)
+    logging.info("RL algo=%s" %algo)
     batch_size = args.batch #64,256  # @param {type:"integer"}
     learning_rate = args.lr #1e-3, 2.5e-4 # @param {type:"number"}
     replay_buffer_capacity = args.buf_cap #<r_buff> #2000 , 100000,50000
@@ -87,13 +90,21 @@ def main(args):
 
     orig_stdout = sys.stdout
     so_path=args.so_path
-
-    memEnvironemt = HybridStorageEnvironment(HybridStorage(trace,so_path))
+    type_env=args.type_env
+    if(type_env=="dual"):
+        memEnvironemt = HybridStorageEnvironment(HybridStorage(trace,so_path))
+        testEnvironemt = HybridStorageEnvironment(HybridStorage(trace,so_path))
+    elif(type_env=="tri"):  
+        memEnvironemt = TriHybridStorageEnvironment(TriHybridStorage(trace,so_path))
+        testEnvironemt = TriHybridStorageEnvironment(TriHybridStorage(trace,so_path))
+    else:
+        logging.error("Unsupported type %s" % type_env)
+        exit(1)
     logging.info("Observation Spec={}".format(memEnvironemt.time_step_spec().observation))
     logging.info("Action Spec={}".format(memEnvironemt.action_spec()))
     logging.info("Reward Spec={}".format(memEnvironemt.time_step_spec().reward))
 
-    testEnvironemt = HybridStorageEnvironment(HybridStorage(trace,so_path))
+    
 
     num_parallel_environments=6
 
@@ -126,7 +137,6 @@ def main(args):
 
     epsilon_fn = tf.keras.optimizers.schedules.PolynomialDecay(
                     initial_learning_rate=1.0,  # initial ε
-
                     decay_steps=traceLength // update_period,
                     end_learning_rate=0.01) # final ε
 
@@ -181,11 +191,7 @@ def main(args):
             from tf_agents.agents.categorical_dqn import categorical_dqn_agent
             train_step_counter = tf.Variable(0)
             optimizer = tf.keras.optimizers.RMSprop(lr=learning_rate, rho=0.95, momentum=0.0, epsilon=eps, centered=True)
-            epsilon_fn = tf.keras.optimizers.schedules.PolynomialDecay(
-                            initial_learning_rate=1, 
-                            decay_steps=traceLength // update_period,
-                            end_learning_rate=0.0001,
-                            power=0.6)
+
             categorical_q_net = categorical_q_network.CategoricalQNetwork(
                 train_env.observation_spec(),
                 train_env.action_spec(),
@@ -327,7 +333,7 @@ def main(args):
         dataset = replay_buffer.as_dataset(
             num_parallel_calls=3, 
             sample_batch_size=batch_size, 
-            num_steps=n_step_update +1).prefetch(16)
+            num_steps=n_step_update +1).prefetch(64)
      
         iterator = iter(dataset)
 
@@ -337,7 +343,7 @@ def main(args):
     tf_agent.train_step_counter.assign(0)
     num_episodes = tf_metrics.NumberOfEpisodes()
     env_steps = tf_metrics.EnvironmentSteps()   
-    train_metrics = [num_episodes,env_steps,tf_metrics.MaxReturnMetric(),tf_metrics.ChosenActionHistogram(dtype=tf.int32),tf_metrics.AverageReturnMetric(), tf_metrics.AverageEpisodeLengthMetric()]
+    train_metrics = [num_episodes,env_steps,tf_metrics.MaxReturnMetric(),tf_metrics.ChosenActionHistogram(),tf_metrics.AverageReturnMetric(), tf_metrics.AverageEpisodeLengthMetric()]
 
     # Evaluate the agent's policy once before training.
     avg_return = compute_avg_return(eval_env, tf_agent.policy, num_eval_episodes)
@@ -402,17 +408,18 @@ def argparser():
         formatter_class=ArgumentDefaultsHelpFormatter,
         add_help=False
     )
+    parser.add_argument("type_env",default="dual")
     parser.add_argument("workload_path")
     parser.add_argument("so_path")
     group = parser.add_mutually_exclusive_group()
-    group.add_argument('--rl_algo', default="DQN")
+    group.add_argument('--rl_algo', default="C51")
     parser.add_argument("--batch", default=128, type=int)
     parser.add_argument("--lr", default=2e-4, type=float)
     parser.add_argument("--buf_cap", default=1000, type=int)
     parser.add_argument("--init_collect", default=1000, type=int)
     parser.add_argument("--eps", default=1, type=float)
     parser.add_argument("--gam", default=0.99, type=float)
-    parser.add_argument("--num_itr", default=100, type=int)
+    parser.add_argument("--num_itr", default=1000, type=int)
     parser.add_argument("--eval_itr", default=1, type=int)
     return parser
 if __name__ == "__main__":

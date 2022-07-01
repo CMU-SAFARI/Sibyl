@@ -32,11 +32,18 @@ Compiling HSS drivers:
 $ cd drivers
 $ gcc -fPIC -shared -o Sibyl_lib.so Sibyl_lib.c
 ```
+## Workloads
+We have tested our environment on block I/O traces from:
+
+*[MSR Cambridge](http://iotta.snia.org/traces/block-io/388) 
+*[FileBench](https://github.com/filebench/filebench)
+
 
 ## Running
 ```
-sibyl execute workload_path driver_path
+sibyl execute type_env workload_path driver_path
 ```
+`type_env`: Mode of execution. Presently we support dual-HSS (dual) or tri-HSS (tri)
 
 `workload_path`: Path to a workload's storage trace
 
