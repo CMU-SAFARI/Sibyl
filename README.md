@@ -1,9 +1,10 @@
 # Sibyl
 
-Hybrid storage systems (HSS) use multiple different storage devices to provide high and scalable storage capacity at high performance. Data placement across different devices is critical to maximize the benefits of such a hybrid system. 
+A hybrid storage system (HSS) uses multiple different storage devices to provide high and scalable storage capacity at high performance. Data placement across different devices is critical to maximize the benefits of such a hybrid system. 
 
 Sibyl is the first technique that uses reinforcement learning for data placement in hybrid storage systems. Sibyl observes different features of the running workload as well as the storage devices to make system-aware data placement decisions. For every decision it makes, Sibyl receives a reward from the system that it uses to evaluate the long-term performance impact of its decision and continuously optimizes its data placement policy online.
 
+Formulating the data placement module as an RL agent enables a human designer to specify only what performance objective the data placement module should target, rather than designing and implementing a new data placement policy that requires explicit specification of how to achieve the performance objective. The use of RL not only enables the data placement module to autonomously learn the “best-fit” data placement strategy for a wide range of workloads and hybrid storage system configurations but also significantly reduces the burden of a human designer in finding a good data placement policy.
 
 ## About The Framework
 We evaluate Sibyl using real systems with various HSS configurations. The HSS devices appear as a single flat block device that exposes one contiguous logical block address space to the OS. We use the [TF-Agents](https://github.com/tensorflow/agents) to develop Sibyl. We run the Linux Mint 20.1 operating system with the  Ext3 file system.
