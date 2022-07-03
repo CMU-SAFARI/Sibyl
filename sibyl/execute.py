@@ -412,7 +412,7 @@ def argparser():
     parser.add_argument("workload_path")
     parser.add_argument("so_path")
     group = parser.add_mutually_exclusive_group()
-    group.add_argument('--rl_algo', default="C51")
+    group.add_argument('--rl_algo', default="DQN")
     parser.add_argument("--batch", default=128, type=int)
     parser.add_argument("--lr", default=2e-4, type=float)
     parser.add_argument("--buf_cap", default=1000, type=int)
