@@ -133,12 +133,12 @@ class HybridStorage():
                 self._devices.at["fastSSD", "Filled"] += totalSize
                 
                 start = time.perf_counter()
-                self.my_functions.qrator_read(self.slowDevice, oldLBA+currSize, totalSize-currSize)
+                self.my_functions.sibyl_read(self.slowDevice, oldLBA+currSize, totalSize-currSize)
                 end = time.perf_counter()           
                 latency += (end - start)
                 
                 start = time.perf_counter()
-                self.my_functions.qrator_write(self.fastDevice, newLBA, totalSize)
+                self.my_functions.sibyl_write(self.fastDevice, newLBA, totalSize)
                 end = time.perf_counter()                    
                 latency += (end - start)
                 
@@ -146,7 +146,7 @@ class HybridStorage():
                 self._mapping_table.at[VBA, "Size"] = currSize
                 self._devices.at["fastSSD", "Filled"] += currSize
                 start = time.perf_counter()
-                self.my_functions.qrator_write(self.fastDevice, newLBA, currSize)
+                self.my_functions.sibyl_write(self.fastDevice, newLBA, currSize)
                 end = time.perf_counter()            
                 latency += (end - start)
                 
@@ -154,12 +154,12 @@ class HybridStorage():
             self._devices.at["fastSSD", "Filled"] += totalSize
         
             start = time.perf_counter()
-            self.my_functions.qrator_read(self.slowDevice, oldLBA, totalSize)
+            self.my_functions.sibyl_read(self.slowDevice, oldLBA, totalSize)
             end = time.perf_counter()        
             latency += (end - start)
             
             start = time.perf_counter()
-            self.my_functions.qrator_write(self.fastDevice, newLBA, totalSize)
+            self.my_functions.sibyl_write(self.fastDevice, newLBA, totalSize)
             end = time.perf_counter()                
             latency += (end - start)
         
@@ -202,12 +202,12 @@ class HybridStorage():
                 self._devices.at["slowSSD", "Filled"] += totalSize
                 
                 start = time.perf_counter()
-                self.my_functions.qrator_read(self.fastDevice, oldLBA+currSize, totalSize-currSize)
+                self.my_functions.sibyl_read(self.fastDevice, oldLBA+currSize, totalSize-currSize)
                 end = time.perf_counter()           
                 latency += (end - start)
                 
                 start = time.perf_counter()
-                self.my_functions.qrator_write(self.slowDevice, newLBA, totalSize)
+                self.my_functions.sibyl_write(self.slowDevice, newLBA, totalSize)
                 end = time.perf_counter()                    
                 latency += (end - start)
                 
@@ -215,7 +215,7 @@ class HybridStorage():
                 self._mapping_table.at[VBA, "Size"] = currSize
                 self._devices.at["slowSSD", "Filled"] += currSize
                 start = time.perf_counter()
-                self.my_functions.qrator_write(self.slowDevice, newLBA, currSize)
+                self.my_functions.sibyl_write(self.slowDevice, newLBA, currSize)
                 end = time.perf_counter()            
                 latency += (end - start)
                 
@@ -251,11 +251,11 @@ class HybridStorage():
                 self._mapping_table.at[VBA, "NumMigrationsSSD2"] += 1
                 self._metadata_table.at[VBA,"Device"]= 0
                 start = time.perf_counter()
-                self.my_functions.qrator_read(self.fastDevice, oldLBA, currSize)
+                self.my_functions.sibyl_read(self.fastDevice, oldLBA, currSize)
                 end = time.perf_counter()
                 latency += (end - start) 
                 start = time.perf_counter()
-                self.my_functions.qrator_write(self.slowDevice, newLBA, currSize)
+                self.my_functions.sibyl_write(self.slowDevice, newLBA, currSize)
                 end = time.perf_counter()           
                 latency += (end - start) 
                 if (sizeUpto >= curReqSize):
@@ -303,12 +303,12 @@ class HybridStorage():
             readSize = int(request[1])
             if deviceName == "slowSSD":
                 start = time.perf_counter()
-                self.my_functions.qrator_read(self.slowDevice, LBA, readSize)
+                self.my_functions.sibyl_read(self.slowDevice, LBA, readSize)
                 end = time.perf_counter()
             
             if deviceName == "fastSSD":
                 start = time.perf_counter()
-                self.my_functions.qrator_read(self.fastDevice, LBA, readSize)
+                self.my_functions.sibyl_read(self.fastDevice, LBA, readSize)
                 end = time.perf_counter()
             latency += (end - start) 
      
@@ -441,12 +441,12 @@ class HybridStorage():
         #Calculate latency
         if deviceName == "fastSSD":
             start = time.perf_counter()
-            self.my_functions.qrator_write(self.fastDevice, LBA, newSize)
+            self.my_functions.sibyl_write(self.fastDevice, LBA, newSize)
             end = time.perf_counter()                 
             latency = (end - start)
         else:
             start = time.perf_counter()
-            self.my_functions.qrator_write(self.slowDevice, LBA, newSize)
+            self.my_functions.sibyl_write(self.slowDevice, LBA, newSize)
             end = time.perf_counter()                 
             latency = (end - start) 
         return latency
